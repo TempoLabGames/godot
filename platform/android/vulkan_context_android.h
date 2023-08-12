@@ -43,7 +43,7 @@ class VulkanContextAndroid : public VulkanContext {
 public:
 	Error window_create(ANativeWindow *p_window, DisplayServer::VSyncMode p_vsync_mode, int p_width, int p_height);
 
-	VulkanContextAndroid() = default;
+	VulkanContextAndroid();
 	~VulkanContextAndroid() override = default;
 
 protected:

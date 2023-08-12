@@ -1433,6 +1433,8 @@ Error RenderingDeviceVulkan::_staging_buffer_allocate(uint32_t p_amount, uint32_
 
 	r_alloc_size = p_amount;
 
+	const unsigned int frame_count = context->get_frame_count();
+
 	while (true) {
 		r_alloc_offset = 0;
 
@@ -1566,6 +1568,8 @@ Error RenderingDeviceVulkan::_buffer_update(Buffer *p_buffer, size_t p_offset, c
 	size_t to_submit = p_data_size;
 	size_t submit_from = 0;
 
+	const unsigned int frame = context->get_frame_index();
+
 	while (to_submit > 0) {
 		uint32_t block_write_offset;
 		uint32_t block_write_amount;
@@ -1616,6 +1620,7 @@ void RenderingDeviceVulkan::_memory_barrier(VkPipelineStageFlags p_src_stage_mas
 	if (p_src_stage_mask == 0 || p_dst_stage_mask == 0) {
 		return; // No barrier, since this is invalid.
 	}
+	const unsigned int frame = context->get_frame_index();
 	vkCmdPipelineBarrier(p_sync_with_draw ? frames[frame].draw_command_buffer : frames[frame].setup_command_buffer, p_src_stage_mask, p_dst_stage_mask, 0, 1, &mem_barrier, 0, nullptr, 0, nullptr);
 }
 
@@ -1667,6 +1672,7 @@ void RenderingDeviceVulkan::_buffer_memory_barrier(VkBuffer buffer, uint64_t p_f
 	buffer_mem_barrier.offset = p_from;
 	buffer_mem_barrier.size = p_size;
 
+	const unsigned int frame = context->get_frame_index();
 	vkCmdPipelineBarrier(p_sync_with_draw ? frames[frame].draw_command_buffer : frames[frame].setup_command_buffer, p_src_stage_mask, p_dst_stage_mask, 0, 0, nullptr, 1, &buffer_mem_barrier, 0, nullptr);
 }
 
@@ -2018,6 +2024,7 @@ RID RenderingDeviceVulkan::texture_create(const TextureFormat &p_format, const T
 		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
 		image_memory_barrier.subresourceRange.layerCount = image_create_info.arrayLayers;
 
+		const unsigned int frame = context->get_frame_index();
 		vkCmdPipelineBarrier(frames[frame].setup_command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 	}
 
@@ -2298,6 +2305,7 @@ RID RenderingDeviceVulkan::texture_create_from_extension(TextureType p_type, Dat
 		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
 		image_memory_barrier.subresourceRange.layerCount = texture.layers;
 
+		const unsigned int frame = context->get_frame_index();
 		vkCmdPipelineBarrier(frames[frame].setup_command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &image_memory_barrier);
 	}
 
@@ -2507,6 +2515,7 @@ Error RenderingDeviceVulkan::_texture_update(RID p_texture, uint32_t p_layer, co
 
 	const uint8_t *r = p_data.ptr();
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = p_use_setup_queue ? frames[frame].setup_command_buffer : frames[frame].draw_command_buffer;
 
 	// Barrier to transfer.
@@ -2776,6 +2785,8 @@ Vector<uint8_t> RenderingDeviceVulkan::texture_get_data(RID p_texture, uint32_t 
 		uint32_t width, height, depth;
 		uint32_t buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps, &width, &height, &depth);
 
+		const unsigned int frame = context->get_frame_index();
+
 		// Allocate buffer.
 		VkCommandBuffer command_buffer = frames[frame].draw_command_buffer; // Makes more sense to retrieve.
 		Buffer tmp_buffer;
@@ -2981,6 +2992,7 @@ Error RenderingDeviceVulkan::texture_copy(RID p_from_texture, RID p_to_texture, 
 	ERR_FAIL_COND_V_MSG(src_tex->read_aspect_mask != dst_tex->read_aspect_mask, ERR_INVALID_PARAMETER,
 			"Source and destination texture must be of the same type (color or depth).");
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 
 	{
@@ -3163,6 +3175,7 @@ Error RenderingDeviceVulkan::texture_resolve_multisample(RID p_from_texture, RID
 	ERR_FAIL_COND_V_MSG(src_tex->read_aspect_mask != dst_tex->read_aspect_mask, ERR_INVALID_PARAMETER,
 			"Source and destination texture must be of the same type (color or depth).");
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 
 	{
@@ -3330,6 +3343,7 @@ Error RenderingDeviceVulkan::texture_clear(RID p_texture, const Color &p_color, 
 	ERR_FAIL_COND_V(p_base_mipmap + p_mipmaps > src_tex->mipmaps, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_base_layer + p_layers > src_layer_count, ERR_INVALID_PARAMETER);
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 
 	VkImageLayout clear_layout = (src_tex->layout == VK_IMAGE_LAYOUT_GENERAL) ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -5943,6 +5957,8 @@ Error RenderingDeviceVulkan::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uin
 	ERR_FAIL_COND_V_MSG((p_size + p_src_offset) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
 	ERR_FAIL_COND_V_MSG((p_size + p_dst_offset) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
 
+	const unsigned int frame = context->get_frame_index();
+
 	// Perform the copy.
 	VkBufferCopy region;
 	region.srcOffset = p_src_offset;
@@ -6041,6 +6057,7 @@ Error RenderingDeviceVulkan::buffer_clear(RID p_buffer, uint32_t p_offset, uint3
 	// Should not be needed.
 	// _buffer_memory_barrier(buffer->buffer, p_offset, p_size, dst_stage_mask, VK_PIPELINE_STAGE_TRANSFER_BIT, dst_access, VK_ACCESS_TRANSFER_WRITE_BIT, p_post_barrier);
 
+	const unsigned int frame = context->get_frame_index();
 	vkCmdFillBuffer(frames[frame].draw_command_buffer, buffer->buffer, p_offset, p_size, 0);
 
 #ifdef FORCE_FULL_BARRIER
@@ -6071,6 +6088,7 @@ Vector<uint8_t> RenderingDeviceVulkan::buffer_get_data(RID p_buffer, uint32_t p_
 	// Make sure no one is using the buffer -- the "true" gets us to the same command buffer as below.
 	_buffer_memory_barrier(buffer->buffer, 0, buffer->size, src_stage_mask, VK_PIPELINE_STAGE_TRANSFER_BIT, src_access_mask, VK_ACCESS_TRANSFER_READ_BIT, true);
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 
 	// Size of buffer to retrieve.
@@ -6729,6 +6747,7 @@ RenderingDevice::DrawListID RenderingDeviceVulkan::draw_list_begin_for_screen(Di
 	ERR_FAIL_COND_V_MSG(draw_list != nullptr, INVALID_ID, "Only one draw list can be active at the same time.");
 	ERR_FAIL_COND_V_MSG(compute_list != nullptr, INVALID_ID, "Only one draw/compute list can be active at the same time.");
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 
 	if (!context->window_is_valid_swapchain(p_screen)) {
@@ -7062,6 +7081,7 @@ RenderingDevice::DrawListID RenderingDeviceVulkan::draw_list_begin(RID p_framebu
 	Error err = _draw_list_setup_framebuffer(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, &vkframebuffer, &render_pass, &draw_list_subpass_count);
 	ERR_FAIL_COND_V(err != OK, INVALID_ID);
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffer = frames[frame].draw_command_buffer;
 	err = _draw_list_render_pass_begin(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, p_clear_color_values, p_clear_depth, p_clear_stencil, viewport_offset, viewport_size, vkframebuffer, render_pass, command_buffer, VK_SUBPASS_CONTENTS_INLINE, p_storage_textures);
 
@@ -7163,6 +7183,7 @@ Error RenderingDeviceVulkan::draw_list_begin_split(RID p_framebuffer, uint32_t p
 	Error err = _draw_list_setup_framebuffer(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, &vkframebuffer, &render_pass, &draw_list_subpass_count);
 	ERR_FAIL_COND_V(err != OK, ERR_CANT_CREATE);
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer frame_command_buffer = frames[frame].draw_command_buffer;
 	err = _draw_list_render_pass_begin(framebuffer, p_initial_color_action, p_final_color_action, p_initial_depth_action, p_final_depth_action, p_clear_color_values, p_clear_depth, p_clear_stencil, viewport_offset, viewport_size, vkframebuffer, render_pass, frame_command_buffer, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, p_storage_textures);
 
@@ -7607,6 +7628,7 @@ RenderingDevice::DrawListID RenderingDeviceVulkan::draw_list_switch_to_next_pass
 	Rect2i viewport;
 	_draw_list_free(&viewport);
 
+	const unsigned int frame = context->get_frame_index();
 	vkCmdNextSubpass(frames[frame].draw_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 
 	_draw_list_allocate(viewport, 0, draw_list_current_subpass);
@@ -7623,6 +7645,7 @@ Error RenderingDeviceVulkan::draw_list_switch_to_next_pass_split(uint32_t p_spli
 	Rect2i viewport;
 	_draw_list_free(&viewport);
 
+	const unsigned int frame = context->get_frame_index();
 	vkCmdNextSubpass(frames[frame].draw_command_buffer, VK_SUBPASS_CONTENTS_INLINE);
 
 	_draw_list_allocate(viewport, p_splits, draw_list_current_subpass);
@@ -7637,6 +7660,9 @@ Error RenderingDeviceVulkan::draw_list_switch_to_next_pass_split(uint32_t p_spli
 Error RenderingDeviceVulkan::_draw_list_allocate(const Rect2i &p_viewport, uint32_t p_splits, uint32_t p_subpass) {
 	// Lock while draw_list is active.
 	_THREAD_SAFE_LOCK_
+
+	const unsigned int frame = context->get_frame_index();
+	const unsigned int frame_count = context->get_frame_count();
 
 	if (p_splits == 0) {
 		draw_list = memnew(DrawList);
@@ -7658,7 +7684,7 @@ Error RenderingDeviceVulkan::_draw_list_allocate(const Rect2i &p_viewport, uint3
 				VkResult res = vkCreateCommandPool(device, &cmd_pool_info, nullptr, &split_draw_list_allocators.write[i].command_pool);
 				ERR_FAIL_COND_V_MSG(res, ERR_CANT_CREATE, "vkCreateCommandPool failed with error " + itos(res) + ".");
 
-				for (int j = 0; j < frame_count; j++) {
+				for (unsigned int j = 0; j < frame_count; j++) {
 					VkCommandBuffer command_buffer;
 
 					VkCommandBufferAllocateInfo cmdbuf;
@@ -7736,6 +7762,7 @@ void RenderingDeviceVulkan::_draw_list_free(Rect2i *r_last_viewport) {
 			}
 		}
 
+		const unsigned int frame = context->get_frame_index();
 		vkCmdExecuteCommands(frames[frame].draw_command_buffer, draw_list_count, command_buffers);
 		memdelete_arr(draw_list);
 		draw_list = nullptr;
@@ -7760,6 +7787,7 @@ void RenderingDeviceVulkan::draw_list_end(BitField<BarrierMask> p_post_barrier) 
 
 	_draw_list_free();
 
+	const unsigned int frame = context->get_frame_index();
 	vkCmdEndRenderPass(frames[frame].draw_command_buffer);
 
 	for (int i = 0; i < draw_list_bound_textures.size(); i++) {
@@ -7872,6 +7900,8 @@ RenderingDevice::ComputeListID RenderingDeviceVulkan::compute_list_begin(bool p_
 
 	// Lock while compute_list is active.
 	_THREAD_SAFE_LOCK_
+
+	const unsigned int frame = context->get_frame_index();
 
 	compute_list = memnew(ComputeList);
 	compute_list->command_buffer = frames[frame].draw_command_buffer;
@@ -8487,6 +8517,8 @@ void RenderingDeviceVulkan::_free_internal(RID p_id) {
 	}
 #endif
 
+	const unsigned int frame = context->get_frame_index();
+
 	// Push everything so it's disposed of next time this frame index is processed (means, it's safe to do it).
 	if (texture_owner.owns(p_id)) {
 		Texture *texture = texture_owner.get_or_null(p_id);
@@ -8631,16 +8663,19 @@ void RenderingDeviceVulkan::set_resource_name(RID p_id, const String p_name) {
 
 void RenderingDeviceVulkan::draw_command_begin_label(String p_label_name, const Color p_color) {
 	_THREAD_SAFE_METHOD_
+	const unsigned int frame = context->get_frame_index();
 	context->command_begin_label(frames[frame].draw_command_buffer, p_label_name, p_color);
 }
 
 void RenderingDeviceVulkan::draw_command_insert_label(String p_label_name, const Color p_color) {
 	_THREAD_SAFE_METHOD_
+	const unsigned int frame = context->get_frame_index();
 	context->command_insert_label(frames[frame].draw_command_buffer, p_label_name, p_color);
 }
 
 void RenderingDeviceVulkan::draw_command_end_label() {
 	_THREAD_SAFE_METHOD_
+	const unsigned int frame = context->get_frame_index();
 	context->command_end_label(frames[frame].draw_command_buffer);
 }
 
@@ -8674,6 +8709,7 @@ void RenderingDeviceVulkan::_finalize_command_bufers() {
 	}
 
 	{ // Complete the setup buffer (that needs to be processed before anything else).
+		const unsigned int frame = context->get_frame_index();
 		vkEndCommandBuffer(frames[frame].setup_command_buffer);
 		vkEndCommandBuffer(frames[frame].draw_command_buffer);
 	}
@@ -8681,6 +8717,7 @@ void RenderingDeviceVulkan::_finalize_command_bufers() {
 
 void RenderingDeviceVulkan::_begin_frame() {
 	// Erase pending resources.
+	const unsigned int frame = context->get_frame_index();
 	_free_pending_resources(frame);
 
 	// Create setup command buffer and set as the setup buffer.
@@ -8755,8 +8792,6 @@ void RenderingDeviceVulkan::swap_buffers() {
 	// Swap buffers.
 	context->swap_buffers();
 
-	frame = (frame + 1) % frame_count;
-
 	_begin_frame();
 }
 
@@ -8768,6 +8803,7 @@ void RenderingDeviceVulkan::submit() {
 
 	_finalize_command_bufers();
 
+	const unsigned int frame = context->get_frame_index();
 	VkCommandBuffer command_buffers[2] = { frames[frame].setup_command_buffer, frames[frame].draw_command_buffer };
 	context->local_device_push_command_buffers(local_device, command_buffers, 2);
 	local_device_processing = true;
@@ -8808,7 +8844,7 @@ VmaPool RenderingDeviceVulkan::_find_or_create_small_allocs_pool(uint32_t p_mem_
 	return pool;
 }
 
-void RenderingDeviceVulkan::_free_pending_resources(int p_frame) {
+void RenderingDeviceVulkan::_free_pending_resources(unsigned int p_frame) {
 	// Free in dependency usage order, so nothing weird happens.
 	// Pipelines.
 	while (frames[p_frame].render_pipelines_to_dispose_of.front()) {
@@ -8919,7 +8955,7 @@ void RenderingDeviceVulkan::prepare_screen_for_drawing() {
 }
 
 uint32_t RenderingDeviceVulkan::get_frame_delay() const {
-	return frame_count;
+	return context->get_frame_count();
 }
 
 uint64_t RenderingDeviceVulkan::get_memory_usage(MemoryType p_type) const {
@@ -8938,6 +8974,7 @@ void RenderingDeviceVulkan::_flush(bool p_current_frame) {
 	if (local_device.is_valid() && !p_current_frame) {
 		return; // Flushing previous frames has no effect with local device.
 	}
+	const unsigned int frame = context->get_frame_index();
 	// Not doing this crashes RADV (undefined behavior).
 	if (p_current_frame) {
 		vkEndCommandBuffer(frames[frame].setup_command_buffer);
@@ -8999,11 +9036,8 @@ void RenderingDeviceVulkan::initialize(VulkanContext *p_context, bool p_local_de
 	context = p_context;
 	device = p_context->get_device();
 	if (p_local_device) {
-		frame_count = 1;
 		local_device = p_context->local_device_create();
 		device = p_context->local_device_get_vk_device(local_device);
-	} else {
-		frame_count = p_context->get_swapchain_image_count() + 1; // Always need one extra to ensure it's unused at any time, without having to use a fence for this.
 	}
 	limits = p_context->get_device_limits();
 	max_timestamp_query_elements = 256;
@@ -9018,10 +9052,11 @@ void RenderingDeviceVulkan::initialize(VulkanContext *p_context, bool p_local_de
 		vmaCreateAllocator(&allocatorInfo, &allocator);
 	}
 
+	const unsigned int frame_count = context->get_frame_count();
+
 	frames.resize(frame_count);
-	frame = 0;
 	// Create setup and frame buffers.
-	for (int i = 0; i < frame_count; i++) {
+	for (unsigned int i = 0; i < frame_count; i++) {
 		frames[i].index = 0;
 
 		{ // Create command pool, one per frame is recommended.
@@ -9094,7 +9129,7 @@ void RenderingDeviceVulkan::initialize(VulkanContext *p_context, bool p_local_de
 		}
 	}
 
-	for (int i = 0; i < frame_count; i++) {
+	for (unsigned int i = 0; i < frame_count; i++) {
 		//Reset all queries in a query pool before doing any operations with them.
 		vkCmdResetQueryPool(frames[0].setup_command_buffer, frames[i].timestamp_pool, 0, max_timestamp_query_elements);
 	}
@@ -9119,7 +9154,7 @@ void RenderingDeviceVulkan::initialize(VulkanContext *p_context, bool p_local_de
 	staging_buffer_current = 0;
 	staging_buffer_used = false;
 
-	for (int i = 0; i < frame_count; i++) {
+	for (unsigned int i = 0; i < frame_count; i++) {
 		// Staging was never used, create a block.
 		Error err = _insert_staging_block();
 		ERR_CONTINUE(err != OK);
@@ -9297,6 +9332,7 @@ void RenderingDeviceVulkan::_free_rids(T &p_owner, const char *p_type) {
 
 void RenderingDeviceVulkan::capture_timestamp(const String &p_name) {
 	ERR_FAIL_COND_MSG(draw_list != nullptr, "Capturing timestamps during draw list creation is not allowed. Offending timestamp was: " + p_name);
+	const unsigned int frame = context->get_frame_index();
 	ERR_FAIL_COND(frames[frame].timestamp_count >= max_timestamp_query_elements);
 
 	// This should be optional for profiling, else it will slow things down.
@@ -9432,10 +9468,12 @@ uint64_t RenderingDeviceVulkan::get_driver_resource(DriverResource p_resource, R
 }
 
 uint32_t RenderingDeviceVulkan::get_captured_timestamps_count() const {
+	const unsigned int frame = context->get_frame_index();
 	return frames[frame].timestamp_result_count;
 }
 
 uint64_t RenderingDeviceVulkan::get_captured_timestamps_frame() const {
+	const unsigned int frame = context->get_frame_index();
 	return frames[frame].index;
 }
 
@@ -9460,6 +9498,7 @@ static void mult64to128(uint64_t u, uint64_t v, uint64_t &h, uint64_t &l) {
 }
 
 uint64_t RenderingDeviceVulkan::get_captured_timestamp_gpu_time(uint32_t p_index) const {
+	const unsigned int frame = context->get_frame_index();
 	ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, 0);
 
 	// This sucks because timestampPeriod multiplier is a float, while the timestamp is 64 bits nanosecs.
@@ -9478,11 +9517,13 @@ uint64_t RenderingDeviceVulkan::get_captured_timestamp_gpu_time(uint32_t p_index
 }
 
 uint64_t RenderingDeviceVulkan::get_captured_timestamp_cpu_time(uint32_t p_index) const {
+	const unsigned int frame = context->get_frame_index();
 	ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, 0);
 	return frames[frame].timestamp_cpu_result_values[p_index];
 }
 
 String RenderingDeviceVulkan::get_captured_timestamp_name(uint32_t p_index) const {
+	const unsigned int frame = context->get_frame_index();
 	ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, String());
 	return frames[frame].timestamp_result_names[p_index];
 }
@@ -9640,9 +9681,12 @@ void RenderingDeviceVulkan::finalize() {
 		}
 	}
 
+	const unsigned int frame = context->get_frame_index();
+	const unsigned int frame_count = context->get_frame_count();
+
 	// Free everything pending.
-	for (int i = 0; i < frame_count; i++) {
-		int f = (frame + i) % frame_count;
+	for (unsigned int i = 0; i < frame_count; i++) {
+		const unsigned int f = (frame + i) % frame_count;
 		_free_pending_resources(f);
 		vkDestroyCommandPool(device, frames[i].command_pool, nullptr);
 		vkDestroyQueryPool(device, frames[i].timestamp_pool, nullptr);

@@ -66,4 +66,7 @@ bool VulkanContextAndroid::_use_validation_layers() {
 	return count > 0;
 }
 
+VulkanContextAndroid::VulkanContextAndroid() {
+}
+
 #endif // VULKAN_ENABLED
