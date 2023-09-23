@@ -23,19 +23,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Editor (target=editor, tests=yes)
-            cache-name: windows-editor
+          - name: Editor w/ Mono (target=editor)
+            cache-name: windows-editor-mono
             target: editor
-            tests: true
-            # Skip debug symbols, they're way too big with MSVC.
-            sconsflags: debug_symbols=no vsproj=yes windows_subsystem=console
-            bin: "./bin/godot.windows.editor.x86_64.exe"
-
-          - name: Template (target=template_release)
-            cache-name: windows-template
-            target: template_release
             tests: false
-            sconsflags: debug_symbols=no
+            # Skip debug symbols, they're way too big with MSVC.
+            sconsflags: debug_symbols=no vsproj=yes windows_subsystem=console module_mono_enabled=yes
+            bin: "./bin/godot.windows.editor.x86_64.mono.exe"
+            build-mono: true
+
+          #- name: Template (target=template_release)
+          #  cache-name: windows-template
+          #  target: template_release
+          #  tests: false
+          #  sconsflags: debug_symbols=no
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +74,16 @@ jobs:
           platform: windows
           target: ${{ matrix.target }}
           tests: ${{ matrix.tests }}
+
+      - name: Generate C# glue
+        if: ${{ matrix.build-mono }}
+        run: |
+          ${{ matrix.bin }} --headless --generate-mono-glue ./modules/mono/glue
+
+      - name: Build .NET solutions
+        if: ${{ matrix.build-mono }}
+        run: |
+          py ./modules/mono/build_scripts/build_assemblies.py --godot-output-dir=./bin --godot-platform=windows
 
       - name: Prepare artifact
         run: |
