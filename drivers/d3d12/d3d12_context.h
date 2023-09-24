@@ -97,7 +97,8 @@ public:
 
 private:
 	enum {
-		FRAME_LAG = 2,
+		// TODO: Make configurable.
+		FRAME_LAG = 1,
 		IMAGE_COUNT = FRAME_LAG + 1,
 	};
 
@@ -144,6 +145,7 @@ private:
 		int height = 0;
 		DisplayServer::VSyncMode vsync_mode = DisplayServer::VSYNC_ENABLED;
 		ComPtr<ID3D12DescriptorHeap> rtv_heap;
+		HANDLE frame_latency_waitable_object = NULL;
 	};
 
 	struct LocalDevice {

@@ -628,6 +628,9 @@ ID3D12Resource *D3D12Context::window_get_framebuffer_texture(DisplayServer::Wind
 void D3D12Context::window_destroy(DisplayServer::WindowID p_window_id) {
 	ERR_FAIL_COND(!windows.has(p_window_id));
 	_wait_for_idle_queue(direct_queue.Get());
+	HANDLE handle = windows[p_window_id].frame_latency_waitable_object;
+	if (handle != NULL)
+		CloseHandle(handle);
 	windows.erase(p_window_id);
 }
 
@@ -663,6 +666,7 @@ Error D3D12Context::_update_swap_chain(Window *window) {
 		}
 		if (tearing_supported)
 			swapchain_flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+		swapchain_flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
 		// Set the windows swap effect if it is available, otherwise FLIP_DISCARD is used.
 		if (vsync_mode_available) {
@@ -708,6 +712,15 @@ Error D3D12Context::_update_swap_chain(Window *window) {
 		ERR_FAIL_COND_V(res, ERR_CANT_CREATE);
 		swapchain.As(&window->swapchain);
 		ERR_FAIL_COND_V(!window->swapchain, ERR_CANT_CREATE);
+
+		// https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_3/nf-dxgi1_3-idxgiswapchain2-setmaximumframelatency
+		res = window->swapchain->SetMaximumFrameLatency(FRAME_LAG);
+		ERR_FAIL_COND_V(res, ERR_CANT_CREATE);
+		window->frame_latency_waitable_object = window->swapchain->GetFrameLatencyWaitableObject();
+		ERR_FAIL_NULL_V(window->frame_latency_waitable_object, ERR_CANT_CREATE);
+		// Must be called before every frame (including the first).
+		// Timeout is arbitrary and should never be hit.
+		WaitForSingleObject(window->frame_latency_waitable_object, 1000);
 
 		format = swapchain_desc.Format;
 
@@ -900,6 +913,10 @@ Error D3D12Context::swap_buffers() {
 		if (res) {
 			print_verbose("D3D12: Presenting swapchain of window " + itos(E.key) + " failed with error " + vformat("0x%08ux", res) + ".");
 		}
+		// Wait until we should generate a new frame.
+		// Ideally this would be a separate step that occurs elsewhere.
+		// Timeout is arbitrary and should never be hit.
+		WaitForSingleObject(w->frame_latency_waitable_object, 1000);
 	}
 
 	direct_queue->Signal(fence.Get(), frame);
