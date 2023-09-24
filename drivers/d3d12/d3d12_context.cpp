@@ -645,7 +645,6 @@ Error D3D12Context::_update_swap_chain(Window *window) {
 			case DisplayServer::VSYNC_MAILBOX: {
 				window->sync_interval = 1;
 				window->present_flags = DXGI_PRESENT_RESTART;
-				swapchain_flags = 0;
 				vsync_mode_available = true;
 			} break;
 			case DisplayServer::VSYNC_ADAPTIVE: {
@@ -654,16 +653,16 @@ Error D3D12Context::_update_swap_chain(Window *window) {
 			case DisplayServer::VSYNC_ENABLED: {
 				window->sync_interval = 1;
 				window->present_flags = 0;
-				swapchain_flags = 0;
 				vsync_mode_available = true;
 			} break;
 			case DisplayServer::VSYNC_DISABLED: {
 				window->sync_interval = 0;
 				window->present_flags = tearing_supported ? DXGI_PRESENT_ALLOW_TEARING : 0;
-				swapchain_flags = tearing_supported ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 				vsync_mode_available = true;
 			} break;
 		}
+		if (tearing_supported)
+			swapchain_flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
 		// Set the windows swap effect if it is available, otherwise FLIP_DISCARD is used.
 		if (vsync_mode_available) {
