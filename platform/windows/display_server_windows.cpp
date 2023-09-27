@@ -2794,6 +2794,31 @@ LRESULT DisplayServerWindows::_handle_early_window_message(HWND hWnd, UINT uMsg,
 	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
+#define WM_APP_ITERATE (WM_APP + 0)
+
+struct IterateParams
+{
+	HWND hWnd;
+	HANDLE quitEvent;
+};
+
+DWORD WINAPI IterateThreadProc(
+	_In_ LPVOID lpParameter
+)
+{
+	IterateParams* params = (IterateParams*)lpParameter;
+	while (true)
+	{
+		if (WaitForSingleObject(params->quitEvent, 0) == WAIT_OBJECT_0)
+			break;
+		SendMessage(params->hWnd, WM_APP_ITERATE, 0, 0);
+		Sleep(1);
+	}
+	CloseHandle(params->quitEvent);
+	free(params);
+	return 0;
+}
+
 // The window procedure for our window class "Engine", used to handle processing of window-related system messages/events.
 // See: https://docs.microsoft.com/en-us/windows/win32/winmsg/window-procedures
 LRESULT DisplayServerWindows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -3683,13 +3708,22 @@ LRESULT DisplayServerWindows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 			return 0;
 
 		} break;
-
-		case WM_ENTERSIZEMOVE: {
-			Input::get_singleton()->release_pressed_events();
-			windows[window_id].move_timer_id = SetTimer(windows[window_id].hWnd, 1, USER_TIMER_MINIMUM, (TIMERPROC) nullptr);
+		case WM_NCLBUTTONDOWN: {
+			IterateParams* params = (IterateParams*)malloc(sizeof(IterateParams));
+			params->hWnd = hWnd;
+			params->quitEvent = CreateEvent(nullptr, false, false, nullptr);
+			HANDLE thread = CreateThread(nullptr, 0, IterateThreadProc, params, 0, nullptr);
+			LRESULT res = DefWindowProcW(hWnd, uMsg, wParam, lParam);
+			SetEvent(params->quitEvent);
+			CloseHandle(thread);
+			return res;
 		} break;
-		case WM_EXITSIZEMOVE: {
-			KillTimer(windows[window_id].hWnd, windows[window_id].move_timer_id);
+		case WM_APP_ITERATE: {
+			_process_key_events();
+			if (!Main::is_iterating()) {
+				Main::iteration();
+			}
+			return 0;
 		} break;
 		case WM_TIMER: {
 			if (wParam == windows[window_id].move_timer_id) {
